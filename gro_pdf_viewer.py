@@ -12,6 +12,7 @@
 # V11 - missing 1 required positional argument: 'src'
 # V12 -  module 'flet.controls.alignment' has no attribute 'center
 # V13 - more center problems
+# V14 - no valid src supplied
 # gro_pdf_viewer.py
 import flet as ft
 import os
@@ -103,8 +104,13 @@ class PDFViewer:
             height=60,
         )
 
-        # PDF Preview
-        self.preview_image = ft.Image(src="", fit=ft.BoxFit.CONTAIN, expand=True)
+        # PDF Preview - Fixed for latest Flet
+        self.preview_image = ft.Image(
+            src="", 
+            src_base64="", 
+            fit=ft.BoxFit.CONTAIN, 
+            expand=True
+        )
 
         self.gesture_detector = ft.GestureDetector(
             content=ft.Stack([self.preview_image], expand=True),
@@ -118,7 +124,7 @@ class PDFViewer:
             content=self.gesture_detector,
             expand=True,
             bgcolor=ft.Colors.SURFACE,
-            alignment=ft.Alignment(0.5, 0.5),   # ← Fixed: correct center alignment
+            alignment=ft.Alignment(0.5, 0.5),
         )
 
         # Search inside PDF
@@ -197,8 +203,8 @@ class PDFViewer:
                 if len(self.page_cache) > 8:
                     self.page_cache.pop(next(iter(self.page_cache)), None)
 
+            # This is the key fix for latest Flet
             self.preview_image.src_base64 = base64.b64encode(img_bytes).decode()
-            self.preview_image.src = ""
 
             self.page_label.value = f"{self.current_page_idx + 1} / {len(self.doc)}"
             self.zoom_label.value = f"{int(self.zoom_level * 100)}%"
@@ -237,7 +243,7 @@ class PDFViewer:
         pass
 
     def show_fullscreen(self, e=None):
-        if not getattr(self.preview_image, "src_base64", None):
+        if not self.preview_image.src_base64:
             return
         dlg = ft.AlertDialog(
             modal=True,
