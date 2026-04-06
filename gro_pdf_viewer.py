@@ -6,6 +6,7 @@
 # V5 - use of ARROW not supported
 # V6 - removed target keyword
 # V7 - added text for arrows
+# V8 - more arrow key errors
 # gro_pdf_viewer.py
 import flet as ft
 import os
@@ -27,7 +28,7 @@ class PDFViewer:
         self.page.window_min_width = 1100
         self.page.window_min_height = 700
 
-        # PDF directory
+        # PDF directory from AI_BOOK environment variable
         self.pdf_dir = Path(os.getenv("AI_BOOK", os.getcwd()))
         if not self.pdf_dir.exists():
             self.pdf_dir = Path(os.getcwd())
@@ -81,23 +82,23 @@ class PDFViewer:
 
         toolbar = ft.Row(
             [
-                ft.IconButton(ft.icons.ARROW_LEFT_ROUNDED, tooltip="Previous Page (←)", on_click=self.prev_page),
+                ft.IconButton(ft.icons.ARROW_LEFT, tooltip="Previous Page (←)", on_click=self.prev_page),
                 ft.Text("Page", size=FONT_SIZE),
                 self.page_label,
-                ft.IconButton(ft.icons.ARROW_RIGHT_ROUNDED, tooltip="Next Page (→)", on_click=self.next_page),
+                ft.IconButton(ft.icons.ARROW_RIGHT, tooltip="Next Page (→)", on_click=self.next_page),
                 ft.VerticalDivider(),
-                ft.IconButton(ft.icons.ZOOM_OUT_ROUNDED, tooltip="Zoom Out (-)", on_click=self.zoom_out),
+                ft.IconButton(ft.icons.ZOOM_OUT, tooltip="Zoom Out (-)", on_click=self.zoom_out),
                 self.zoom_label,
-                ft.IconButton(ft.icons.ZOOM_IN_ROUNDED, tooltip="Zoom In (+)", on_click=self.zoom_in),
-                ft.IconButton(ft.icons.FIT_SCREEN_ROUNDED, tooltip="Toggle Fit Mode", on_click=self.toggle_fit_mode),
-                ft.IconButton(ft.icons.FULLSCREEN_ROUNDED, tooltip="Full Screen", on_click=self.show_fullscreen),
+                ft.IconButton(ft.icons.ZOOM_IN, tooltip="Zoom In (+)", on_click=self.zoom_in),
+                ft.IconButton(ft.icons.FIT_SCREEN, tooltip="Toggle Fit Mode", on_click=self.toggle_fit_mode),
+                ft.IconButton(ft.icons.FULLSCREEN, tooltip="Full Screen", on_click=self.show_fullscreen),
             ],
             alignment=ft.MainAxisAlignment.CENTER,
             spacing=10,
             height=60,
         )
 
-        # PDF Preview
+        # PDF Preview with pan and double-click fullscreen
         self.preview_image = ft.Image(fit=ft.ImageFit.CONTAIN, expand=True)
 
         self.gesture_detector = ft.GestureDetector(
@@ -133,8 +134,10 @@ class PDFViewer:
             self.pdf_search_field,
         ], expand=True, spacing=10)
 
+        # Main layout
         self.page.add(ft.Row([left_pane, right_pane], expand=True, spacing=0))
 
+        # Keyboard shortcuts
         self.page.on_keyboard_event = self.on_keyboard
 
     def load_pdf_list(self):
@@ -291,3 +294,4 @@ def main(page: ft.Page):
 
 if __name__ == "__main__":
     ft.run(main, view=ft.AppView.FLET_APP)
+    # Change to ft.AppView.WEB_BROWSER if you prefer web view
