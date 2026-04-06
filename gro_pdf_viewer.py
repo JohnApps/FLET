@@ -98,7 +98,7 @@ class PDFViewer:
             height=60,
         )
 
-        # Preview Image - create with src only
+        # Preview Image - use src="" initially
         self.preview_image = ft.Image(src="", fit=ft.BoxFit.CONTAIN, expand=True)
 
         self.gesture_detector = ft.GestureDetector(
@@ -116,7 +116,6 @@ class PDFViewer:
             alignment=ft.Alignment(0.5, 0.5),
         )
 
-        # Search inside PDF
         self.pdf_search_field = ft.TextField(
             label="Search inside current PDF",
             hint_text="Type and press Enter...",
@@ -189,8 +188,10 @@ class PDFViewer:
                 if len(self.page_cache) > 8:
                     self.page_cache.pop(next(iter(self.page_cache)), None)
 
-            img_bytes = self.page_cache[page_num]
-            self.preview_image.src_base64 = base64.b64encode(img_bytes).decode()
+            # Convert to base64 and set directly to src (this works in Flet 0.84)
+            b64_string = base64.b64encode(self.page_cache[page_num]).decode("utf-8")
+            self.preview_image.src = b64_string
+            self.preview_image.update()
 
             self.page_label.value = f"{self.current_page_idx + 1} / {len(self.doc)}"
             self.zoom_label.value = f"{int(self.zoom_level * 100)}%"
@@ -228,11 +229,11 @@ class PDFViewer:
         pass
 
     def show_fullscreen(self, e=None):
-        if not getattr(self.preview_image, "src_base64", None):
+        if not getattr(self.preview_image, "src", None):
             return
         dlg = ft.AlertDialog(
             modal=True,
-            content=ft.Image(src_base64=self.preview_image.src_base64, fit=ft.BoxFit.CONTAIN),
+            content=ft.Image(src=self.preview_image.src, fit=ft.BoxFit.CONTAIN),
             actions=[ft.TextButton("Close", on_click=lambda _: self.close_dialog())],
             full_screen=True,
         )
