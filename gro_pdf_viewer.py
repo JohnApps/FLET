@@ -14,6 +14,7 @@
 # V13 - more center problems
 # V14 - no valid src supplied
 # V15 - invalid src values
+# V16 - base64 not known
 # gro_pdf_viewer.py
 import flet as ft
 import os
@@ -35,18 +36,15 @@ class PDFViewer:
         self.page.window_min_width = 1100
         self.page.window_min_height = 700
 
-        # PDF directory from AI_BOOK environment variable
         self.pdf_dir = Path(os.getenv("AI_BOOK", os.getcwd()))
         if not self.pdf_dir.exists():
             self.pdf_dir = Path(os.getcwd())
 
-        # State
         self.pdf_files: List[Path] = []
         self.current_pdf: Optional[Path] = None
         self.doc: Optional[fitz.Document] = None
         self.current_page_idx: int = 0
         self.zoom_level: float = 1.0
-        self.fit_mode: str = "width"
         self.page_cache: dict = {}
 
         self.build_ui()
@@ -77,27 +75,22 @@ class PDFViewer:
         )
 
         # RIGHT PANE
-        self.path_text = ft.Text(
-            "No PDF loaded",
-            size=FONT_SIZE,
-            color=ft.Colors.ON_SURFACE_VARIANT,
-            expand=True
-        )
+        self.path_text = ft.Text("No PDF loaded", size=FONT_SIZE, color=ft.Colors.ON_SURFACE_VARIANT, expand=True)
 
         self.page_label = ft.Text("0 / 0", size=FONT_SIZE, width=110)
         self.zoom_label = ft.Text("100%", size=FONT_SIZE, width=70)
 
         toolbar = ft.Row(
             [
-                ft.IconButton(ft.Icons.ARROW_LEFT, tooltip="Previous Page (←)", on_click=self.prev_page),
+                ft.IconButton(ft.Icons.ARROW_LEFT, tooltip="Previous (←)", on_click=self.prev_page),
                 ft.Text("Page", size=FONT_SIZE),
                 self.page_label,
-                ft.IconButton(ft.Icons.ARROW_RIGHT, tooltip="Next Page (→)", on_click=self.next_page),
+                ft.IconButton(ft.Icons.ARROW_RIGHT, tooltip="Next (→)", on_click=self.next_page),
                 ft.VerticalDivider(),
-                ft.IconButton(ft.Icons.ZOOM_OUT, tooltip="Zoom Out (-)", on_click=self.zoom_out),
+                ft.IconButton(ft.Icons.ZOOM_OUT, tooltip="Zoom Out", on_click=self.zoom_out),
                 self.zoom_label,
-                ft.IconButton(ft.Icons.ZOOM_IN, tooltip="Zoom In (+)", on_click=self.zoom_in),
-                ft.IconButton(ft.Icons.FIT_SCREEN, tooltip="Toggle Fit Mode", on_click=self.toggle_fit_mode),
+                ft.IconButton(ft.Icons.ZOOM_IN, tooltip="Zoom In", on_click=self.zoom_in),
+                ft.IconButton(ft.Icons.FIT_SCREEN, tooltip="Fit Mode", on_click=self.toggle_fit_mode),
                 ft.IconButton(ft.Icons.FULLSCREEN, tooltip="Full Screen", on_click=self.show_fullscreen),
             ],
             alignment=ft.MainAxisAlignment.CENTER,
@@ -105,12 +98,8 @@ class PDFViewer:
             height=60,
         )
 
-        # PDF Preview - create with src only (no src_base64 in constructor)
-        self.preview_image = ft.Image(
-            src="", 
-            fit=ft.BoxFit.CONTAIN, 
-            expand=True
-        )
+        # Preview Image - create with src only
+        self.preview_image = ft.Image(src="", fit=ft.BoxFit.CONTAIN, expand=True)
 
         self.gesture_detector = ft.GestureDetector(
             content=ft.Stack([self.preview_image], expand=True),
@@ -130,7 +119,7 @@ class PDFViewer:
         # Search inside PDF
         self.pdf_search_field = ft.TextField(
             label="Search inside current PDF",
-            hint_text="Type text and press Enter...",
+            hint_text="Type and press Enter...",
             on_submit=self.search_in_current_pdf,
             text_size=FONT_SIZE,
             expand=True,
@@ -146,7 +135,6 @@ class PDFViewer:
         ], expand=True, spacing=10)
 
         self.page.add(ft.Row([left_pane, right_pane], expand=True, spacing=0))
-
         self.page.on_keyboard_event = self.on_keyboard
 
     def load_pdf_list(self):
@@ -192,9 +180,7 @@ class PDFViewer:
 
         try:
             page_num = self.current_page_idx
-            if page_num in self.page_cache:
-                img_bytes = self.page_cache[page_num]
-            else:
+            if page_num not in self.page_cache:
                 page = self.doc[page_num]
                 matrix = fitz.Matrix(self.zoom_level, self.zoom_level)
                 pix = page.get_pixmap(matrix=matrix, alpha=False)
@@ -203,7 +189,7 @@ class PDFViewer:
                 if len(self.page_cache) > 8:
                     self.page_cache.pop(next(iter(self.page_cache)), None)
 
-            # Update the image using src_base64 (after creation)
+            img_bytes = self.page_cache[page_num]
             self.preview_image.src_base64 = base64.b64encode(img_bytes).decode()
 
             self.page_label.value = f"{self.current_page_idx + 1} / {len(self.doc)}"
@@ -232,7 +218,6 @@ class PDFViewer:
         self.render_page()
 
     def toggle_fit_mode(self, e=None):
-        self.fit_mode = "page" if self.fit_mode == "width" else "width"
         self.zoom_level = 1.0
         self.render_page()
 
@@ -243,7 +228,7 @@ class PDFViewer:
         pass
 
     def show_fullscreen(self, e=None):
-        if not self.preview_image.src_base64:
+        if not getattr(self.preview_image, "src_base64", None):
             return
         dlg = ft.AlertDialog(
             modal=True,
@@ -278,7 +263,7 @@ class PDFViewer:
             else:
                 self.show_snack(f"'{query}' not found", ft.Colors.ORANGE)
         except Exception:
-            self.show_snack("Text search failed (PDF may be image-only)", ft.Colors.ORANGE)
+            self.show_snack("Text search failed", ft.Colors.ORANGE)
 
     def on_keyboard(self, e: ft.KeyboardEvent):
         if e.key == "ArrowLeft":
@@ -293,9 +278,7 @@ class PDFViewer:
             self.show_fullscreen()
 
     def show_snack(self, message: str, color=ft.Colors.ON_SURFACE):
-        self.page.show_snack_bar(
-            ft.SnackBar(ft.Text(message, size=FONT_SIZE), bgcolor=color)
-        )
+        self.page.show_snack_bar(ft.SnackBar(ft.Text(message, size=FONT_SIZE), bgcolor=color))
         self.page.update()
 
 
