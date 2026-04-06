@@ -7,6 +7,7 @@
 # V6 - removed target keyword
 # V7 - added text for arrows
 # V8 - more arrow key errors
+# V9 - arrow keys still invalid
 # gro_pdf_viewer.py
 import flet as ft
 import os
@@ -82,23 +83,23 @@ class PDFViewer:
 
         toolbar = ft.Row(
             [
-                ft.IconButton(ft.icons.ARROW_LEFT, tooltip="Previous Page (←)", on_click=self.prev_page),
+                ft.IconButton(ft.Icons.ARROW_LEFT, tooltip="Previous Page (←)", on_click=self.prev_page),
                 ft.Text("Page", size=FONT_SIZE),
                 self.page_label,
-                ft.IconButton(ft.icons.ARROW_RIGHT, tooltip="Next Page (→)", on_click=self.next_page),
+                ft.IconButton(ft.Icons.ARROW_RIGHT, tooltip="Next Page (→)", on_click=self.next_page),
                 ft.VerticalDivider(),
-                ft.IconButton(ft.icons.ZOOM_OUT, tooltip="Zoom Out (-)", on_click=self.zoom_out),
+                ft.IconButton(ft.Icons.ZOOM_OUT, tooltip="Zoom Out (-)", on_click=self.zoom_out),
                 self.zoom_label,
-                ft.IconButton(ft.icons.ZOOM_IN, tooltip="Zoom In (+)", on_click=self.zoom_in),
-                ft.IconButton(ft.icons.FIT_SCREEN, tooltip="Toggle Fit Mode", on_click=self.toggle_fit_mode),
-                ft.IconButton(ft.icons.FULLSCREEN, tooltip="Full Screen", on_click=self.show_fullscreen),
+                ft.IconButton(ft.Icons.ZOOM_IN, tooltip="Zoom In (+)", on_click=self.zoom_in),
+                ft.IconButton(ft.Icons.FIT_SCREEN, tooltip="Toggle Fit Mode", on_click=self.toggle_fit_mode),
+                ft.IconButton(ft.Icons.FULLSCREEN, tooltip="Full Screen", on_click=self.show_fullscreen),
             ],
             alignment=ft.MainAxisAlignment.CENTER,
             spacing=10,
             height=60,
         )
 
-        # PDF Preview with pan and double-click fullscreen
+        # PDF Preview
         self.preview_image = ft.Image(fit=ft.ImageFit.CONTAIN, expand=True)
 
         self.gesture_detector = ft.GestureDetector(
@@ -134,10 +135,8 @@ class PDFViewer:
             self.pdf_search_field,
         ], expand=True, spacing=10)
 
-        # Main layout
         self.page.add(ft.Row([left_pane, right_pane], expand=True, spacing=0))
 
-        # Keyboard shortcuts
         self.page.on_keyboard_event = self.on_keyboard
 
     def load_pdf_list(self):
@@ -294,4 +293,3 @@ def main(page: ft.Page):
 
 if __name__ == "__main__":
     ft.run(main, view=ft.AppView.FLET_APP)
-    # Change to ft.AppView.WEB_BROWSER if you prefer web view
