@@ -4,6 +4,7 @@
 # V3 - Recommended (native desktop window)
 # V4 - correct use of colors
 # V5 - use of ARROW not supported
+# V6 - removed target keyword
 # gro_pdf_viewer.py
 import flet as ft
 import os
@@ -25,7 +26,7 @@ class PDFViewer:
         self.page.window_min_width = 1100
         self.page.window_min_height = 700
 
-        # PDF directory from AI_BOOK env var
+        # PDF directory from AI_BOOK environment variable
         self.pdf_dir = Path(os.getenv("AI_BOOK", os.getcwd()))
         if not self.pdf_dir.exists():
             self.pdf_dir = Path(os.getcwd())
@@ -95,7 +96,7 @@ class PDFViewer:
             height=60,
         )
 
-        # Preview area
+        # PDF Preview
         self.preview_image = ft.Image(fit=ft.ImageFit.CONTAIN, expand=True)
 
         self.gesture_detector = ft.GestureDetector(
@@ -226,7 +227,7 @@ class PDFViewer:
         pass
 
     def on_pan_update(self, e: ft.DragUpdateEvent):
-        pass  # Basic pan; can be enhanced later with offset
+        pass
 
     def show_fullscreen(self, e=None):
         if not getattr(self.preview_image, "src_base64", None):
@@ -290,5 +291,5 @@ def main(page: ft.Page):
 
 
 if __name__ == "__main__":
-    ft.run(target=main, view=ft.AppView.FLET_APP)
-    # For web browser: ft.run(target=main, view=ft.AppView.WEB_BROWSER)
+    ft.run(main, view=ft.AppView.FLET_APP)
+    # For web browser use: ft.run(main, view=ft.AppView.WEB_BROWSER)
