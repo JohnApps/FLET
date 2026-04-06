@@ -13,7 +13,7 @@
 # V12 -  module 'flet.controls.alignment' has no attribute 'center
 # V13 - more center problems
 # V14 - no valid src supplied
-# gro_pdf_viewer.py
+# V15 - invalid src values# gro_pdf_viewer.py
 import flet as ft
 import os
 import base64
@@ -104,10 +104,9 @@ class PDFViewer:
             height=60,
         )
 
-        # PDF Preview - Fixed for latest Flet
+        # PDF Preview - create with src only (no src_base64 in constructor)
         self.preview_image = ft.Image(
             src="", 
-            src_base64="", 
             fit=ft.BoxFit.CONTAIN, 
             expand=True
         )
@@ -203,7 +202,7 @@ class PDFViewer:
                 if len(self.page_cache) > 8:
                     self.page_cache.pop(next(iter(self.page_cache)), None)
 
-            # This is the key fix for latest Flet
+            # Update the image using src_base64 (after creation)
             self.preview_image.src_base64 = base64.b64encode(img_bytes).decode()
 
             self.page_label.value = f"{self.current_page_idx + 1} / {len(self.doc)}"
