@@ -11,6 +11,7 @@
 # V10 - more attribute erors
 # V11 - missing 1 required positional argument: 'src'
 # V12 -  module 'flet.controls.alignment' has no attribute 'center
+# V13 - more center problems
 # gro_pdf_viewer.py
 import flet as ft
 import os
@@ -117,7 +118,7 @@ class PDFViewer:
             content=self.gesture_detector,
             expand=True,
             bgcolor=ft.Colors.SURFACE,
-            alignment=ft.alignment.center,          # ← Fixed here
+            alignment=ft.Alignment(0.5, 0.5),   # ← Fixed: correct center alignment
         )
 
         # Search inside PDF
