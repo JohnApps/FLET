@@ -1,0 +1,45 @@
+Python 3.14.3 script using flet to display
+1. all PDF files in a given directory (env AI_BOOK) in the left pane
+2. preview the content of the PDF file selected allowing 
+-- paging next and previous, zoom + and zoom -
+-- settings for page width and full page viewing
+-- pan within the PDF preview
+3. searching for PDF files in the left pane
+4. display the path to the PDF file at the top of the right pane
+5. use a font size of 16 for legibility
+6. allow full-screen view of PDF file when clicked
+7. display the pdf without converting to an image if possible
+8. allow searching within the displayed pdf
+9. generate a requirements.txt file
+10. write a description of the application including usage instructions
+
+
+All source code resides in H:\FLET and must have a prefix of ca_ (to show it's from 
+ChatGPT). Environment is Windows 11 with Python Python 3.14.3 
+
+The following instructions must be followed:
+Set clear boundaries for the AI
+Specify exactly which libraries, versions, or functions are allowed.
+Include “do not use deprecated or non-existent libraries.”
+Example prompt:
+“Write a Python script using requests version 2.31, without any deprecated libraries, that fetches JSON from this API.”
+Break the problem into smaller chunks
+Instead of generating the whole script at once, ask for:
+The function signatures
+One small function at a time
+Unit tests for each function
+This reduces compounded errors and makes debugging easier.
+Validate incrementally
+Run each function as it’s generated.
+Catch errors immediately before moving to the next part.
+This prevents 30+ iterations of “whole script fails” loops.
+Ask for error handling explicitly
+Ask the AI to handle exceptions, check inputs, and log errors.
+Many times scripts fail not because the logic is wrong, but because unexpected inputs break it.
+Use AI to debug intelligently
+Instead of asking “fix the script,” give the error message and ask:
+“The following error occurred: … How do I fix it?”
+AI can give precise fixes instead of regenerating the whole script.
+6. Version control
+Keep each iteration in a separate file or commit in git.
+You can roll back to the last working version instead of starting over.
