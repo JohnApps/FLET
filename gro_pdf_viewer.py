@@ -3,6 +3,7 @@
 # V2 - corrected flet version incompatabilities
 # V3 - Recommended (native desktop window)
 # V4 - correct use of colors
+# V5 - use of ARROW not supported
 # gro_pdf_viewer.py
 import flet as ft
 import os
@@ -21,10 +22,10 @@ class PDFViewer:
         self.page.theme_mode = ft.ThemeMode.DARK
         self.page.padding = 0
         self.page.spacing = 0
-        self.page.window_min_width = 1000
+        self.page.window_min_width = 1100
         self.page.window_min_height = 700
 
-        # PDF directory from AI_BOOK environment variable
+        # PDF directory from AI_BOOK env var
         self.pdf_dir = Path(os.getenv("AI_BOOK", os.getcwd()))
         if not self.pdf_dir.exists():
             self.pdf_dir = Path(os.getcwd())
@@ -36,8 +37,6 @@ class PDFViewer:
         self.current_page_idx: int = 0
         self.zoom_level: float = 1.0
         self.fit_mode: str = "width"
-        self.offset_x: float = 0.0
-        self.offset_y: float = 0.0
         self.page_cache: dict = {}
 
         self.build_ui()
@@ -62,8 +61,8 @@ class PDFViewer:
                 ft.Text("Available PDFs", size=FONT_SIZE + 2, weight=ft.FontWeight.BOLD),
                 self.pdf_listview,
             ], expand=True, spacing=10),
-            width=320,
-            border=ft.border.only(right=ft.border.BorderSide(1, ft.Colors.OUTLINE)),
+            width=340,
+            border=ft.Border.only(right=ft.BorderSide(1, ft.Colors.OUTLINE)),
             padding=15,
         )
 
@@ -75,29 +74,28 @@ class PDFViewer:
             expand=True
         )
 
-        # Toolbar controls
-        self.page_label = ft.Text("0 / 0", size=FONT_SIZE, width=100)
-        self.zoom_label = ft.Text("100%", size=FONT_SIZE, width=60)
+        self.page_label = ft.Text("0 / 0", size=FONT_SIZE, width=110)
+        self.zoom_label = ft.Text("100%", size=FONT_SIZE, width=70)
 
         toolbar = ft.Row(
             [
-                ft.IconButton(ft.icons.KEYBOARD_ARROW_LEFT, tooltip="Previous (←)", on_click=self.prev_page),
+                ft.IconButton(ft.icons.ARROW_LEFT, tooltip="Previous Page (←)", on_click=self.prev_page),
                 ft.Text("Page", size=FONT_SIZE),
                 self.page_label,
-                ft.IconButton(ft.icons.KEYBOARD_ARROW_RIGHT, tooltip="Next (→)", on_click=self.next_page),
+                ft.IconButton(ft.icons.ARROW_RIGHT, tooltip="Next Page (→)", on_click=self.next_page),
                 ft.VerticalDivider(),
                 ft.IconButton(ft.icons.ZOOM_OUT, tooltip="Zoom Out (-)", on_click=self.zoom_out),
                 self.zoom_label,
                 ft.IconButton(ft.icons.ZOOM_IN, tooltip="Zoom In (+)", on_click=self.zoom_in),
-                ft.IconButton(ft.icons.FIT_SCREEN, tooltip="Fit Width / Page", on_click=self.toggle_fit_mode),
+                ft.IconButton(ft.icons.FIT_SCREEN, tooltip="Toggle Fit Mode", on_click=self.toggle_fit_mode),
                 ft.IconButton(ft.icons.FULLSCREEN, tooltip="Full Screen", on_click=self.show_fullscreen),
             ],
             alignment=ft.MainAxisAlignment.CENTER,
-            spacing=8,
+            spacing=10,
             height=60,
         )
 
-        # PDF Preview with pan & double-click
+        # Preview area
         self.preview_image = ft.Image(fit=ft.ImageFit.CONTAIN, expand=True)
 
         self.gesture_detector = ft.GestureDetector(
@@ -105,7 +103,7 @@ class PDFViewer:
             on_pan_start=self.on_pan_start,
             on_pan_update=self.on_pan_update,
             on_double_tap=self.show_fullscreen,
-            drag_interval=5,
+            drag_interval=10,
         )
 
         self.preview_container = ft.Container(
@@ -118,7 +116,7 @@ class PDFViewer:
         # Search inside PDF
         self.pdf_search_field = ft.TextField(
             label="Search inside current PDF",
-            hint_text="Type and press Enter...",
+            hint_text="Type text and press Enter...",
             on_submit=self.search_in_current_pdf,
             text_size=FONT_SIZE,
             expand=True,
@@ -169,7 +167,6 @@ class PDFViewer:
             self.doc = fitz.open(pdf_path)
             self.current_page_idx = 0
             self.zoom_level = 1.0
-            self.offset_x = self.offset_y = 0.0
 
             self.path_text.value = str(pdf_path)
             self.render_page()
@@ -191,7 +188,7 @@ class PDFViewer:
                 pix = page.get_pixmap(matrix=matrix, alpha=False)
                 img_bytes = pix.tobytes("jpeg", quality=92)
                 self.page_cache[page_num] = img_bytes
-                if len(self.page_cache) > 6:
+                if len(self.page_cache) > 8:
                     self.page_cache.pop(next(iter(self.page_cache)), None)
 
             self.preview_image.src_base64 = base64.b64encode(img_bytes).decode()
@@ -229,8 +226,7 @@ class PDFViewer:
         pass
 
     def on_pan_update(self, e: ft.DragUpdateEvent):
-        self.offset_x += e.delta_x
-        self.offset_y += e.delta_y
+        pass  # Basic pan; can be enhanced later with offset
 
     def show_fullscreen(self, e=None):
         if not getattr(self.preview_image, "src_base64", None):
@@ -261,7 +257,6 @@ class PDFViewer:
                     text = (page.extract_text() or "").lower()
                     if query in text:
                         results.append(i)
-
             if results:
                 self.current_page_idx = results[0]
                 self.render_page()
@@ -269,14 +264,14 @@ class PDFViewer:
             else:
                 self.show_snack(f"'{query}' not found", ft.Colors.ORANGE)
         except Exception:
-            self.show_snack("Text search failed (PDF may be image-based)", ft.Colors.ORANGE)
+            self.show_snack("Text search failed (PDF may be image-only)", ft.Colors.ORANGE)
 
     def on_keyboard(self, e: ft.KeyboardEvent):
         if e.key == "ArrowLeft":
             self.prev_page()
         elif e.key == "ArrowRight":
             self.next_page()
-        elif e.key == "+":
+        elif e.key in ("+", "="):
             self.zoom_in()
         elif e.key == "-":
             self.zoom_out()
@@ -295,6 +290,5 @@ def main(page: ft.Page):
 
 
 if __name__ == "__main__":
-    # Recommended for Windows desktop
-    ft.app(target=main, view=ft.AppView.FLET_APP)
-    # For browser: ft.app(target=main, view=ft.AppView.WEB_BROWSER)
+    ft.run(target=main, view=ft.AppView.FLET_APP)
+    # For web browser: ft.run(target=main, view=ft.AppView.WEB_BROWSER)
