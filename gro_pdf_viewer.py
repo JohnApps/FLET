@@ -10,6 +10,7 @@
 # V9 - arrow keys still invalid
 # V10 - more attribute erors
 # V11 - missing 1 required positional argument: 'src'
+# V12 -  module 'flet.controls.alignment' has no attribute 'center
 # gro_pdf_viewer.py
 import flet as ft
 import os
@@ -101,7 +102,7 @@ class PDFViewer:
             height=60,
         )
 
-        # PDF Preview - must provide src or src_base64 at creation
+        # PDF Preview
         self.preview_image = ft.Image(src="", fit=ft.BoxFit.CONTAIN, expand=True)
 
         self.gesture_detector = ft.GestureDetector(
@@ -116,7 +117,7 @@ class PDFViewer:
             content=self.gesture_detector,
             expand=True,
             bgcolor=ft.Colors.SURFACE,
-            alignment=ft.alignment.center,
+            alignment=ft.alignment.center,          # ← Fixed here
         )
 
         # Search inside PDF
@@ -195,9 +196,8 @@ class PDFViewer:
                 if len(self.page_cache) > 8:
                     self.page_cache.pop(next(iter(self.page_cache)), None)
 
-            # Update using src_base64
             self.preview_image.src_base64 = base64.b64encode(img_bytes).decode()
-            self.preview_image.src = ""  # keep src empty
+            self.preview_image.src = ""
 
             self.page_label.value = f"{self.current_page_idx + 1} / {len(self.doc)}"
             self.zoom_label.value = f"{int(self.zoom_level * 100)}%"
