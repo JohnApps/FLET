@@ -8,6 +8,7 @@
 # V7 - added text for arrows
 # V8 - more arrow key errors
 # V9 - arrow keys still invalid
+# V10 - more attribute erors
 # gro_pdf_viewer.py
 import flet as ft
 import os
@@ -100,7 +101,7 @@ class PDFViewer:
         )
 
         # PDF Preview
-        self.preview_image = ft.Image(fit=ft.ImageFit.CONTAIN, expand=True)
+        self.preview_image = ft.Image(fit=ft.BoxFit.CONTAIN, expand=True)
 
         self.gesture_detector = ft.GestureDetector(
             content=ft.Stack([self.preview_image], expand=True),
@@ -235,7 +236,7 @@ class PDFViewer:
             return
         dlg = ft.AlertDialog(
             modal=True,
-            content=ft.Image(src_base64=self.preview_image.src_base64, fit=ft.ImageFit.CONTAIN),
+            content=ft.Image(src_base64=self.preview_image.src_base64, fit=ft.BoxFit.CONTAIN),
             actions=[ft.TextButton("Close", on_click=lambda _: self.close_dialog())],
             full_screen=True,
         )
