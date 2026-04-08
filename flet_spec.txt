@@ -11,7 +11,8 @@ Python 3.14.3 script using flet to display
 7. display the pdf without converting to an image if possible
 8. allow searching within the displayed pdf
 9. generate a requirements.txt file
-10. write a description of the application including usage instructions
+10, All errors to be written to flet_errors.txt
+11. write a description of the application including usage instructions
 
 
 All source code resides in H:\FLET and must have a prefix of ca_ (to show it's from 
