@@ -1,6 +1,11 @@
 # ignore all .bat and .env files
 *.bat
 *.env
+*.db
+*.db-wal
+__pycache__
+.image_cache
+
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
