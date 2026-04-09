@@ -3,6 +3,7 @@
 *.env
 *.db
 *.db-wal
+*.db-shm
 __pycache__
 .image_cache
 
