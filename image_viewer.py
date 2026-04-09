@@ -11,7 +11,7 @@ Up button to go to parent folder
 add a search button (ilike) in the left pane
 Done. Search field added to left pane - searches recursively through all subdirectories for matching image names (case-insensitive). Results are limited to 100 matches, click "← Back" to return to folder view.
 """
-
+import os
 from pathlib import Path
 import flet as ft
 from flet import icons as icon_module
@@ -43,24 +43,24 @@ def main(page: ft.Page):
     def get_images(folder: Path) -> list[Path]:
         key = ("images", str(folder))
         mtime = folder.stat().st_mtime
-        if key in CACHE and CACHE.get(key + "_mtime") == mtime:
+        if key in CACHE and CACHE.get((*key, "mtime")) == mtime:
             return CACHE.get(key)
         images = []
         for f in sorted(folder.iterdir()):
             if f.is_file() and f.suffix.lower() in IMAGE_EXTS:
                 images.append(f)
         CACHE.set(key, images)
-        CACHE.set(key + "_mtime", mtime)
+        CACHE.set((*key, "mtime"), mtime)
         return images
 
     def get_subdirs(folder: Path) -> list[Path]:
         key = ("subdirs", str(folder))
         mtime = folder.stat().st_mtime
-        if key in CACHE and CACHE.get(key + "_mtime") == mtime:
+        if key in CACHE and CACHE.get((*key, "mtime")) == mtime:
             return CACHE.get(key)
         dirs = sorted([d for d in folder.iterdir() if d.is_dir()])
         CACHE.set(key, dirs)
-        CACHE.set(key + "_mtime", mtime)
+        CACHE.set((*key, "mtime"), mtime)
         return dirs
 
     def search_recursive(folder: Path, term: str) -> list[Path]:
