@@ -8,6 +8,8 @@
 # V6 - ignore all .TIF files as they are VERY large
 # V7 - turned logging off and contatenated filepath and filename
 # V8 - no .NEF files#!/usr/bin/env python
+# V9 - no warning when image too large for thumbnal
+#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
 cl_image_viewer.py - Tkinter Image Viewer with Thumbnail Caching
@@ -113,28 +115,25 @@ class ThumbnailCache:
                 cached = self.cache.get(key)
                 if cached is not None:
                     return cached
-            except Exception as e:
-                logger.warning(f"Cache read error for {image_path}: {e}")
+            except Exception:
+                pass
         
         try:
             # Check file size first - skip files over 20MB to prevent crashes
             file_size = os.path.getsize(image_path)
             if file_size > 20 * 1024 * 1024:  # 20MB limit
-                logger.warning(f"File too large ({file_size // 1024 // 1024}MB), skipping thumbnail: {image_path}")
                 return None
             
             # Open with explicit limits to prevent memory issues
             with Image.open(image_path) as img:
                 # Check for extremely large images that could cause crashes
                 if img.width > 20000 or img.height > 20000:
-                    logger.warning(f"Image too large, skipping: {image_path} ({img.width}x{img.height})")
                     return None
                 
                 # Force load to catch decompression errors early
                 try:
                     img.load()
-                except Exception as e:
-                    logger.warning(f"Failed to load image data for {image_path}: {e}")
+                except Exception:
                     return None
                 
                 # Handle orientation from EXIF
@@ -147,7 +146,6 @@ class ThumbnailCache:
                 # Convert problematic modes before thumbnailing
                 if img.mode in ('I', 'I;16', 'I;16B', 'I;16L', 'F'):
                     # 16-bit or float images - convert to 8-bit
-                    logger.debug(f"Converting {img.mode} to L for {image_path}")
                     img = img.point(lambda x: x * (255.0 / 65535.0) if img.mode.startswith('I;16') else x)
                     img = img.convert('L')
                 
@@ -174,13 +172,12 @@ class ThumbnailCache:
                 if self.cache is not None:
                     try:
                         self.cache.set(key, thumb_bytes)
-                    except Exception as e:
-                        logger.warning(f"Cache write error: {e}")
+                    except Exception:
+                        pass
                     
                 return thumb_bytes
                 
-        except Exception as e:
-            logger.warning(f"Error creating thumbnail for {image_path}: {e}")
+        except Exception:
             return None
     
     def close(self):
