@@ -4,6 +4,7 @@
 *.db
 *.db-wal
 *.db-shm
+*.png
 __pycache__
 .image_cache
 
