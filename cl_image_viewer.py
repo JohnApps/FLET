@@ -3,6 +3,8 @@
 # V1
 # V2
 # V3
+# V4
+# V5 - detailed logging
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
@@ -81,9 +83,14 @@ COLORS = {
 class ThumbnailCache:
     """Manages thumbnail caching using diskcache to reduce disk I/O."""
     
-    def __init__(self, cache_dir: Path, size: tuple = THUMBNAIL_SIZE):
-        self.cache = diskcache.Cache(str(cache_dir), size_limit=500 * 1024 * 1024)
+    def __init__(self, cache_dir: Path, size: tuple = THUMBNAIL_SIZE, use_cache: bool = True):
+        self.use_cache = use_cache
+        if use_cache:
+            self.cache = diskcache.Cache(str(cache_dir), size_limit=500 * 1024 * 1024)
+        else:
+            self.cache = None
         self.size = size
+        logger.info(f"ThumbnailCache initialized (use_cache={use_cache})")
     
     def get_cache_key(self, image_path: str) -> str:
         """Generate cache key from path and modification time."""
@@ -97,9 +104,11 @@ class ThumbnailCache:
         """Retrieve cached thumbnail or generate and cache it."""
         key = self.get_cache_key(image_path)
         
-        cached = self.cache.get(key)
-        if cached is not None:
-            return cached
+        # Try cache first
+        if self.cache is not None:
+            cached = self.cache.get(key)
+            if cached is not None:
+                return cached
         
         try:
             with Image.open(image_path) as img:
@@ -119,16 +128,20 @@ class ThumbnailCache:
                 img.save(buffer, format='JPEG', quality=85)
                 thumb_bytes = buffer.getvalue()
                 
-                self.cache.set(key, thumb_bytes)
+                # Cache it
+                if self.cache is not None:
+                    self.cache.set(key, thumb_bytes)
+                    
                 return thumb_bytes
                 
         except Exception as e:
-            print(f"Error creating thumbnail for {image_path}: {e}")
+            logger.warning(f"Error creating thumbnail for {image_path}: {e}")
             return None
     
     def close(self):
         """Close the cache."""
-        self.cache.close()
+        if self.cache is not None:
+            self.cache.close()
 
 
 # -----------------------------------------------------------------------------
@@ -743,13 +756,18 @@ class ImageViewerApp:
             
             self.status_bar.set_message(f"Loading {len(self.image_list)} images...")
             
-            # Queue thumbnails for loading on main thread (no threading!)
-            self._thumbnail_queue = list(self.image_list)
-            self.root.after(50, self._load_next_thumbnail)
-            
-            # Display first image
+            # Display first image BEFORE queueing thumbnails
             logger.debug("Displaying first image")
             self._goto_image(0)
+            
+            # Queue thumbnails for loading on main thread
+            logger.debug("Queueing thumbnails for loading")
+            self._thumbnail_queue = list(self.image_list)
+            
+            # Use a longer delay to let the UI settle
+            logger.debug("Scheduling first thumbnail load")
+            self.root.after(100, self._load_next_thumbnail)
+            
             logger.debug("Folder selection complete")
             
         except Exception as e:
@@ -757,45 +775,78 @@ class ImageViewerApp:
     
     def _load_next_thumbnail(self):
         """Load next thumbnail from queue (on main thread via after)."""
-        if not self._thumbnail_queue:
-            # Done loading
-            logger.info("All thumbnails loaded")
-            self.status_bar.set_message(
-                f"Loaded {len(self.image_list)} images from {self._current_folder}"
-            )
-            return
-        
-        # Get next image
-        image_path = self._thumbnail_queue.pop(0)
-        
-        # Check if folder changed
-        if self._current_folder and not image_path.startswith(self._current_folder):
-            logger.debug("Folder changed, stopping thumbnail load")
-            return
-        
         try:
-            thumb_bytes = self.cache.get_thumbnail(image_path)
-            if thumb_bytes:
-                img = Image.open(BytesIO(thumb_bytes))
-                photo = ImageTk.PhotoImage(img)
-                self._photo_refs.append(photo)  # MUST keep reference!
-                self.thumbnail_strip.update_thumbnail(image_path, photo)
+            logger.debug(f"_load_next_thumbnail called, queue size: {len(self._thumbnail_queue)}")
+            
+            if not self._thumbnail_queue:
+                # Done loading
+                logger.info("All thumbnails loaded")
+                self.status_bar.set_message(
+                    f"Loaded {len(self.image_list)} images from {self._current_folder}"
+                )
+                return
+            
+            # Check if window still exists
+            if not self.root.winfo_exists():
+                logger.warning("Window destroyed, stopping thumbnail load")
+                return
+            
+            # Get next image
+            image_path = self._thumbnail_queue.pop(0)
+            logger.debug(f"Loading thumbnail: {os.path.basename(image_path)}")
+            
+            # Check if folder changed
+            if self._current_folder and not image_path.startswith(self._current_folder):
+                logger.debug("Folder changed, stopping thumbnail load")
+                return
+            
+            # Load thumbnail with explicit error handling at each step
+            try:
+                # Step 1: Get bytes from cache
+                thumb_bytes = self.cache.get_thumbnail(image_path)
+                if not thumb_bytes:
+                    logger.debug(f"No thumbnail bytes for {image_path}")
+                else:
+                    logger.debug(f"Got {len(thumb_bytes)} bytes")
+                    
+                    # Step 2: Create PIL Image from bytes
+                    pil_img = Image.open(BytesIO(thumb_bytes))
+                    pil_img.load()  # Force load
+                    logger.debug(f"PIL image loaded: {pil_img.size}")
+                    
+                    # Step 3: Convert to PhotoImage
+                    photo = ImageTk.PhotoImage(pil_img)
+                    logger.debug("PhotoImage created")
+                    
+                    # Step 4: Store reference (CRITICAL!)
+                    self._photo_refs.append(photo)
+                    
+                    # Step 5: Update UI
+                    self.thumbnail_strip.update_thumbnail(image_path, photo)
+                    logger.debug("Thumbnail updated in UI")
+                    
+            except Exception as e:
+                logger.warning(f"Error loading thumbnail {os.path.basename(image_path)}: {e}")
+            
+            # Update status periodically
+            remaining = len(self._thumbnail_queue)
+            if remaining > 0 and remaining % 20 == 0:
+                self.status_bar.set_message(f"Loading... {remaining} remaining")
+            
+            # Schedule next thumbnail with delay
+            if self._thumbnail_queue:
+                self.root.after(20, self._load_next_thumbnail)
+            else:
+                logger.info("All thumbnails loaded")
+                self.status_bar.set_message(
+                    f"Loaded {len(self.image_list)} images from {self._current_folder}"
+                )
+                
         except Exception as e:
-            logger.debug(f"Error loading thumbnail {image_path}: {e}")
-        
-        # Update status
-        remaining = len(self._thumbnail_queue)
-        if remaining > 0 and remaining % 10 == 0:
-            self.status_bar.set_message(f"Loading... {remaining} remaining")
-        
-        # Schedule next thumbnail
-        if self._thumbnail_queue:
-            self.root.after(5, self._load_next_thumbnail)
-        else:
-            logger.info("All thumbnails loaded")
-            self.status_bar.set_message(
-                f"Loaded {len(self.image_list)} images from {self._current_folder}"
-            )
+            logger.exception(f"Error in _load_next_thumbnail: {e}")
+            # Try to continue with next thumbnail
+            if self._thumbnail_queue:
+                self.root.after(100, self._load_next_thumbnail)
     
     def _on_thumbnail_select(self, image_path: str):
         """Handle thumbnail click."""
