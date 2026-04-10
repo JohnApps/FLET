@@ -5,6 +5,7 @@
 # V3
 # V4
 # V5 - detailed logging
+# V6 - ignore all .TIF files as they are VERY large
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
@@ -60,7 +61,7 @@ logger.info(f"Starting Image Viewer - Log file: {LOG_FILE}")
 ROOT_PATH = r"O:\bilder"
 CACHE_DIR = Path.home() / ".cache" / "cl_image_viewer"
 THUMBNAIL_SIZE = (100, 100)
-SUPPORTED_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.tiff', '.tif'}
+SUPPORTED_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp'}
 
 # Dark theme colors
 COLORS = {
@@ -106,12 +107,34 @@ class ThumbnailCache:
         
         # Try cache first
         if self.cache is not None:
-            cached = self.cache.get(key)
-            if cached is not None:
-                return cached
+            try:
+                cached = self.cache.get(key)
+                if cached is not None:
+                    return cached
+            except Exception as e:
+                logger.warning(f"Cache read error for {image_path}: {e}")
         
         try:
+            # Check file size first - skip files over 20MB to prevent crashes
+            file_size = os.path.getsize(image_path)
+            if file_size > 20 * 1024 * 1024:  # 20MB limit
+                logger.warning(f"File too large ({file_size // 1024 // 1024}MB), skipping thumbnail: {image_path}")
+                return None
+            
+            # Open with explicit limits to prevent memory issues
             with Image.open(image_path) as img:
+                # Check for extremely large images that could cause crashes
+                if img.width > 20000 or img.height > 20000:
+                    logger.warning(f"Image too large, skipping: {image_path} ({img.width}x{img.height})")
+                    return None
+                
+                # Force load to catch decompression errors early
+                try:
+                    img.load()
+                except Exception as e:
+                    logger.warning(f"Failed to load image data for {image_path}: {e}")
+                    return None
+                
                 # Handle orientation from EXIF
                 try:
                     from PIL import ImageOps
@@ -119,9 +142,26 @@ class ThumbnailCache:
                 except Exception:
                     pass
                 
+                # Convert problematic modes before thumbnailing
+                if img.mode in ('I', 'I;16', 'I;16B', 'I;16L', 'F'):
+                    # 16-bit or float images - convert to 8-bit
+                    logger.debug(f"Converting {img.mode} to L for {image_path}")
+                    img = img.point(lambda x: x * (255.0 / 65535.0) if img.mode.startswith('I;16') else x)
+                    img = img.convert('L')
+                
+                if img.mode == 'RGBA':
+                    # Create white background for transparency
+                    background = Image.new('RGB', img.size, (255, 255, 255))
+                    background.paste(img, mask=img.split()[3])
+                    img = background
+                elif img.mode not in ('RGB', 'L'):
+                    img = img.convert('RGB')
+                
+                # Create thumbnail
                 img.thumbnail(self.size, Image.Resampling.LANCZOS)
                 
-                if img.mode not in ('RGB', 'L'):
+                # Ensure RGB for JPEG output
+                if img.mode != 'RGB':
                     img = img.convert('RGB')
                 
                 buffer = BytesIO()
@@ -130,7 +170,10 @@ class ThumbnailCache:
                 
                 # Cache it
                 if self.cache is not None:
-                    self.cache.set(key, thumb_bytes)
+                    try:
+                        self.cache.set(key, thumb_bytes)
+                    except Exception as e:
+                        logger.warning(f"Cache write error: {e}")
                     
                 return thumb_bytes
                 
