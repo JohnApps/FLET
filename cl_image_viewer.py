@@ -7,7 +7,7 @@
 # V5 - detailed logging
 # V6 - ignore all .TIF files as they are VERY large
 # V7 - turned logging off and contatenated filepath and filename
-#!/usr/bin/env python
+# V8 - no .NEF files#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
 cl_image_viewer.py - Tkinter Image Viewer with Thumbnail Caching
@@ -63,6 +63,7 @@ ROOT_PATH = r"O:\bilder"
 CACHE_DIR = Path.home() / ".cache" / "cl_image_viewer"
 THUMBNAIL_SIZE = (100, 100)
 SUPPORTED_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp'}
+IGNORED_EXTENSIONS = {'.tif', '.tiff', '.nef', '.raw', '.cr2', '.arw', '.dng'}  # Large/raw formats
 
 # Dark theme colors
 COLORS = {
