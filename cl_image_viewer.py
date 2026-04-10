@@ -6,6 +6,7 @@
 # V4
 # V5 - detailed logging
 # V6 - ignore all .TIF files as they are VERY large
+# V7 - turned logging off and contatenated filepath and filename
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
@@ -41,7 +42,7 @@ import diskcache
 # Setup logging to file and console
 LOG_FILE = Path.home() / "cl_image_viewer.log"
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=logging.INFO,
     format='%(asctime)s [%(levelname)s] %(message)s',
     handlers=[
         logging.FileHandler(LOG_FILE, mode='w', encoding='utf-8'),
@@ -468,17 +469,19 @@ class ImageDisplay(tk.Frame):
     
     def _setup_ui(self):
         """Build display area."""
-        # Path info bar
-        self.path_label = tk.Label(
+        # Path info bar (Entry widget so text can be selected and copied)
+        self._path_var = tk.StringVar(value="(select a folder)")
+        self.path_label = tk.Entry(
             self,
-            text="Path: (none)",
-            bg=COLORS['bg_medium'],
+            textvariable=self._path_var,
+            readonlybackground=COLORS['bg_medium'],
             fg=COLORS['fg'],
             font=('Consolas', 10),
-            anchor='w',
-            padx=10, pady=6
+            relief='flat',
+            state='readonly',
+            cursor='arrow'
         )
-        self.path_label.pack(side=tk.TOP, fill=tk.X)
+        self.path_label.pack(side=tk.TOP, fill=tk.X, ipady=6)
         
         # Image canvas
         self.canvas = tk.Canvas(
@@ -553,10 +556,8 @@ class ImageDisplay(tk.Frame):
         logger.debug(f"load_image called: {image_path}")
         self.current_path = image_path
         
-        # Update path label
-        folder = os.path.dirname(image_path)
-        filename = os.path.basename(image_path)
-        self.path_label.configure(text=f"Path: {folder}  |  File: {filename}")
+        # Update path entry with full path (can be selected/copied)
+        self._path_var.set(image_path)
         
         try:
             logger.debug("Opening image with PIL")
@@ -602,6 +603,7 @@ class ImageDisplay(tk.Frame):
     def show_placeholder(self, text: str = "📷 Select a folder to browse images"):
         """Show placeholder text."""
         self._original_image = None
+        self._path_var.set("")
         if self._image_id:
             self.canvas.delete(self._image_id)
             self._image_id = None
