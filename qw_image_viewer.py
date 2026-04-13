@@ -128,7 +128,7 @@ class ImageViewerApp:
         self.path_var = tk.StringVar()
         self.path_entry = tk.Entry(
             center_frame, textvariable=self.path_var, state="readonly",
-            bg="#000000", fg="#ffffff", font=("Lucida Console", 10), 
+            bg="#000000", fg="#ffffff", font=("Arial", 16), 
             relief=tk.FLAT, cursor="ibeam", exportselection=True
         )
         self.path_entry.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 5))
