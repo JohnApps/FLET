@@ -1,29 +1,33 @@
 # H:\FLET\qw_image_viewer.py
 # V1
+# V2
 #!/usr/bin/env python
-# qw_image_viewer.py - Tkinter Image Viewer with Thumbnail Caching
+# qw_image_viewer.py - Tkinter Image Viewer with Thumbnail Caching & Threading
 # Target: Windows 11 | Python 3.14.3 | Miniconda 26.1.1 | venv: winnie
 # Location: H:\FLET
 
 import os
 import sys
 import hashlib
+import queue
 import warnings
 import traceback
 import faulthandler
+import threading
 import tkinter as tk
 from tkinter import ttk
 from PIL import Image, ImageTk, ImageOps
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # ─── SAFETY OVERRIDES ───────────────────────────────────────────────────────
-faulthandler.enable()  # Catch C-level segfaults
-Image.MAX_IMAGE_PIXELS = None  # Allow high-res images
+faulthandler.enable()
+sys.excepthook = lambda *args: traceback.print_exception(*args)
+Image.MAX_IMAGE_PIXELS = None
 warnings.filterwarnings("ignore", category=Image.DecompressionBombWarning)
 # ────────────────────────────────────────────────────────────────────────────
 
 
 class DiskCache:
-    """Disk cache for thumbnails with mtime-based invalidation."""
     def __init__(self, cache_dir: str):
         self.cache_dir = cache_dir
         os.makedirs(cache_dir, exist_ok=True)
@@ -50,29 +54,34 @@ class DiskCache:
         cache_file = os.path.join(self.cache_dir, f"{self._hash_path(path)}_{size[0]}x{size[1]}.png")
         try:
             img.save(cache_file, format="PNG", optimize=True)
-        except Exception as e:
-            print(f"[Cache] Save failed: {e}")
+        except Exception:
+            pass
 
 
 class ImageViewerApp:
     ROOT_DIR = r"O:\bilder"
     CACHE_DIR = r"H:\FLET\.qw_thumb_cache"
     THUMB_SIZE = (110, 110)
-    SUPPORTED_EXT = {'.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.tif', '.webp', '.ico'}
+    # Excluded *.tif / *.tiff per request
+    SUPPORTED_EXT = {'.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.ico'}
 
     def __init__(self, root: tk.Tk):
         self.root = root
         self.root.title("QW Image Viewer")
-        self.root.geometry("1200x800")
+        self.root.geometry("1280x850")
         self.root.minsize(900, 600)
 
         self.cache = DiskCache(self.CACHE_DIR)
-        self.current_folder = ""
         self.thumb_refs: list[ImageTk.PhotoImage] = []
         self.large_img_ref: ImageTk.PhotoImage | None = None
-        self._load_queue: list[str] = []
-        self._load_index = 0
-        self._after_id = None
+        self.current_folder = ""
+        
+        # Threading & Load Token
+        self._load_token = 0
+        self._stop_event = threading.Event()
+        self._result_queue: queue.Queue = queue.Queue()
+        self._load_thread: threading.Thread | None = None
+        self._load_count = 0
 
         if not os.path.isdir(self.ROOT_DIR):
             tk.messagebox.showerror("Path Error", f"Root directory not found:\n{self.ROOT_DIR}")
@@ -85,11 +94,9 @@ class ImageViewerApp:
 
     # ─── UI LAYOUT ────────────────────────────────────────────────────────
     def _setup_ui(self):
-        # Status Bar
         self.status_var = tk.StringVar(value="Initializing...")
         ttk.Label(self.root, textvariable=self.status_var, anchor=tk.W, relief=tk.SUNKEN, borderwidth=1).pack(fill=tk.X, padx=5, pady=2)
 
-        # Main Paned Window (Left/Right resizable)
         main_pane = ttk.PanedWindow(self.root, orient=tk.HORIZONTAL)
         main_pane.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
 
@@ -110,20 +117,31 @@ class ImageViewerApp:
         self.tree.bind("<<TreeviewSelect>>", self._on_tree_select)
         self.tree.bind("<<TreeviewOpen>>", self._on_tree_expand)
 
-        # CENTER: Large Image + Path
+        # CENTER: Selectable Path + Copy + Image
         center_frame = ttk.Frame(right_frame)
         center_frame.pack(fill=tk.BOTH, expand=True)
         center_frame.rowconfigure(0, weight=0)
         center_frame.rowconfigure(1, weight=1)
         center_frame.columnconfigure(0, weight=1)
+        center_frame.columnconfigure(1, weight=0)
 
-        self.path_label = ttk.Label(center_frame, text="", justify=tk.CENTER, wraplength=700, anchor=tk.CENTER)
-        self.path_label.grid(row=0, column=0, sticky="ew", pady=(0, 5))
+        self.path_var = tk.StringVar()
+        self.path_entry = tk.Entry(
+            center_frame, textvariable=self.path_var, state="readonly",
+            bg="#2b2b2b", fg="#00e676", font=("Consolas", 10), relief=tk.FLAT, cursor="ibeam", exportselection=True
+        )
+        self.path_entry.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 5))
+        # Auto-select text on click/focus
+        self.path_entry.bind("<FocusIn>", lambda e: self.path_entry.select_range(0, tk.END))
+        self.path_entry.bind("<Button-1>", lambda e: self.path_entry.select_range(0, tk.END))
+
+        copy_btn = ttk.Button(center_frame, text="📋 Copy Path", command=self._copy_path)
+        copy_btn.grid(row=0, column=1, padx=(5, 0), pady=(0, 5), sticky="e")
 
         self.image_label = tk.Label(center_frame, bg="#1e1e1e", relief=tk.SUNKEN)
-        self.image_label.grid(row=1, column=0, sticky="nsew")
+        self.image_label.grid(row=1, column=0, columnspan=2, sticky="nsew")
 
-        # BOTTOM: Scrollable Thumbnails
+        # BOTTOM: Thumbnails
         bottom_frame = ttk.Frame(right_frame)
         bottom_frame.pack(fill=tk.X, side=tk.BOTTOM, pady=(5, 0))
 
@@ -135,12 +153,16 @@ class ImageViewerApp:
 
         self.thumb_frame = ttk.Frame(self.thumb_canvas)
         self.thumb_canvas.create_window((0, 0), window=self.thumb_frame, anchor="nw")
-        self.thumb_frame.bind("<Configure>", self._on_thumb_frame_resize)
+        self.thumb_frame.bind("<Configure>", lambda e: self.thumb_canvas.configure(scrollregion=self.thumb_canvas.bbox("all")))
 
-    def _on_thumb_frame_resize(self, event):
-        bbox = self.thumb_canvas.bbox("all")
-        if bbox:
-            self.thumb_canvas.configure(scrollregion=bbox)
+    def _copy_path(self):
+        path = self.path_var.get()
+        if path:
+            self.root.clipboard_clear()
+            self.root.clipboard_append(path)
+            self.root.update()
+            self.status_var.set("✅ Path copied to clipboard!")
+            self.root.after(1500, lambda: self.status_var.set("Ready"))
 
     # ─── TREE NAVIGATION ──────────────────────────────────────────────────
     def _init_tree(self):
@@ -149,14 +171,15 @@ class ImageViewerApp:
 
     def _populate_node(self, parent: str, path: str) -> None:
         try:
-            entries = sorted(os.scandir(path), key=lambda e: e.name.lower())
-        except (PermissionError, OSError):
+            # Sort folders Z-A instead of A-Z
+            entries = sorted(os.scandir(path), key=lambda e: e.name.lower(), reverse=True)
+        except (PermissionError, OSError) as e:
+            print(f"[Tree Scan Warning] {e}")
             return
         for entry in entries:
             if entry.is_dir(follow_symlinks=False):
                 node = self.tree.insert(parent, tk.END, text=entry.name, open=False, values=(entry.path,))
                 self.tree.insert(node, tk.END, text="placeholder")
-
     def _on_tree_expand(self, event):
         item = self.tree.focus()
         if not item: return
@@ -167,101 +190,138 @@ class ImageViewerApp:
             self._populate_node(item, path)
 
     def _on_tree_select(self, event):
-        selected = self.tree.selection()
-        if not selected: return
-        path = self.tree.item(selected[0], "values")[0]
-        if os.path.isdir(path):
-            self._clear_thumbnails()
+        try:
+            selected = self.tree.selection()
+            if not selected: return
+            item_data = self.tree.item(selected[0])
+            path = item_data.get("values", [None])[0]
+            if not path or not os.path.isdir(path):
+                return
             self.current_folder = path
-            self.status_var.set(f"Scanning: {path}")
+            self._cancel_loading()
+            self.status_var.set(f"Scanning: {path}...")
             self.root.update_idletasks()
-            self._queue_thumbnails(path)
+            self._start_thumbnail_load(path)
+        except Exception as e:
+            print(f"[Tree Select Error] {e}")
+            traceback.print_exc()
 
-    # ─── THUMBNAIL QUEUE ──────────────────────────────────────────────────
+    # ─── THUMBNAIL LOADING (Threaded & Tokenized) ─────────────────────────
+    def _cancel_loading(self):
+        self._stop_event.set()
+        if self._load_thread and self._load_thread.is_alive():
+            self._load_thread.join(timeout=0.5)
+        self._load_token += 1  # Invalidate stale results
+        self._result_queue = queue.Queue()
+        self._stop_event.clear()
+        self._clear_thumbnails()
+
     def _clear_thumbnails(self):
-        self._cancel_load()
         for w in self.thumb_frame.winfo_children():
             w.destroy()
         self.thumb_refs.clear()
-        self._load_queue.clear()
-        self._load_index = 0
+        self._load_count = 0
+        self.thumb_canvas.configure(scrollregion=(0, 0, 0, 0))
 
-    def _cancel_load(self):
-        if self._after_id:
-            self.root.after_cancel(self._after_id)
-            self._after_id = None
-
-    def _queue_thumbnails(self, folder: str):
+    def _start_thumbnail_load(self, folder: str):
         try:
             files = [
                 f.path for f in os.scandir(folder)
                 if f.is_file(follow_symlinks=False) and os.path.splitext(f.name.lower())[1] in self.SUPPORTED_EXT
             ]
-        except PermissionError:
-            files = []
-        files.sort(key=os.path.basename)
-
-        self._load_queue = files
-        self._load_index = 0
-        self.status_var.set(f"Found {len(files)} images. Loading thumbnails...")
-        # Small delay to let UI settle
-        self._after_id = self.root.after(50, lambda: self._load_next_batch())
-
-    def _load_next_batch(self, batch_size: int = 15):
-        if self._load_index >= len(self._load_queue):
-            self.status_var.set(f"Ready: {len(self._load_queue)} thumbnails loaded.")
-            self._after_id = None
+        except Exception as e:
+            print(f"[SCANDIR FAILED] {e}")
+            self.status_var.set("❌ Cannot read directory. Check permissions.")
             return
 
-        end = min(self._load_index + batch_size, len(self._load_queue))
-        for idx in range(self._load_index, end):
-            self._create_thumbnail_button(self._load_queue[idx])
+        if not files:
+            self.status_var.set("No supported images found.")
+            return
 
-        self._load_index = end
-        bbox = self.thumb_canvas.bbox("all")
-        if bbox:
-            self.thumb_canvas.configure(scrollregion=bbox)
-        
-        self._after_id = self.root.after(5, lambda: self._load_next_batch(batch_size))
+        self._load_thread = threading.Thread(target=self._background_load, args=(files, self._load_token), daemon=True)
+        self._load_thread.start()
+        self.root.after(10, self._poll_queue)
 
-    def _create_thumbnail_button(self, filepath: str):
+    def _background_load(self, file_list: list[str], token: int):
+        processed = 0
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            # Submit all, process as they complete
+            future_map = {executor.submit(self._process_single_thumb, fp): fp for fp in file_list}
+            for future in as_completed(future_map):
+                if self._stop_event.is_set() or self._load_token != token:
+                    executor.shutdown(wait=False, cancel_futures=True)
+                    break
+                try:
+                    result = future.result()
+                    if result:
+                        self._result_queue.put(result)
+                        processed += 1
+                        if processed % 20 == 0:
+                            self.status_var.set(f"Processing {processed}/{len(file_list)} thumbnails...")
+                except Exception as e:
+                    print(f"[Worker Error] {e}")
+        self._result_queue.put(("DONE", None))
+
+    def _process_single_thumb(self, filepath: str) -> tuple[str, Image.Image] | None:
         try:
             cached = self.cache.get(filepath, self.THUMB_SIZE)
             if cached:
-                img = cached
-            else:
-                with Image.open(filepath) as src:
-                    src.load()
-                    try:
-                        src = ImageOps.exif_transpose(src)
-                    except Exception:
-                        pass
-                    src.thumbnail(self.THUMB_SIZE, Image.Resampling.LANCZOS)
-                    img = src.copy()
+                return filepath, cached
+
+            with Image.open(filepath) as src:
+                src.load()
+                try:
+                    src = ImageOps.exif_transpose(src)
+                except Exception:
+                    pass
+                src.thumbnail(self.THUMB_SIZE, Image.Resampling.LANCZOS)
+                img = src.copy()
+                if img.mode not in ("RGB", "RGBA"):
+                    img = img.convert("RGB")
                 self.cache.save(filepath, img, self.THUMB_SIZE)
-
-            if img.mode not in ("RGB", "RGBA"):
-                img = img.convert("RGB")
-
-            if img.width == 0 or img.height == 0:
-                return
-
-            tk_img = ImageTk.PhotoImage(img)
-            self.thumb_refs.append(tk_img)
-
-            btn = tk.Label(self.thumb_frame, image=tk_img, bg="#333333", cursor="hand2", bd=0)
-            btn.pack(side=tk.LEFT, padx=2, pady=2)
-            btn.bind("<Button-1>", lambda e, fp=filepath: self._show_large_image(fp))
+                return filepath, img
         except Exception:
-            pass  # Silently skip corrupted files
+            return None
+
+    def _poll_queue(self):
+        # Ignore if token changed (folder switched)
+        current_token = self._load_token
+        
+        batch = []
+        try:
+            while not self._result_queue.empty():
+                item = self._result_queue.get_nowait()
+                if item == ("DONE", None):
+                    self.status_var.set(f"✅ Ready: {self._load_count} thumbnails loaded.")
+                    return
+                batch.append(item)
+        except queue.Empty:
+            pass
+
+        if batch and self._load_token == current_token:
+            for fp, img in batch:
+                self._add_thumb_to_ui(fp, img)
+            self._load_count += len(batch)
+            self.status_var.set(f"Loading... {len(batch)}/{self._load_count}")
+            bbox = self.thumb_canvas.bbox("all")
+            if bbox:
+                self.thumb_canvas.configure(scrollregion=bbox)
+
+        self.root.after(5, self._poll_queue)
+
+    def _add_thumb_to_ui(self, filepath: str, img: Image.Image):
+        tk_img = ImageTk.PhotoImage(img)
+        self.thumb_refs.append(tk_img)
+        btn = tk.Label(self.thumb_frame, image=tk_img, bg="#333333", cursor="hand2", bd=0)
+        btn.pack(side=tk.LEFT, padx=2, pady=2)
+        btn.bind("<Button-1>", lambda e, fp=filepath: self._show_large_image(fp))
 
     # ─── LARGE IMAGE DISPLAY ──────────────────────────────────────────────
     def _show_large_image(self, filepath: str):
-        self.path_label.config(text=filepath)
-        self.image_label.config(image="", text="Loading...")
+        self.path_var.set(filepath)
+        self.image_label.config(image="", text="Loading...", fg="#ffcc00")
         self.root.update_idletasks()
 
-        # Free previous large image memory
         self.large_img_ref = None
 
         try:
@@ -272,16 +332,11 @@ class ImageViewerApp:
                 except Exception:
                     pass
 
-                # Safe display dimensions (prevents Tk GDI overflow)
-                max_w, max_h = 3000, 2000
-                w = self.image_label.winfo_width()
-                h = self.image_label.winfo_height()
-                w = max(w, 200)
-                h = max(h, 200)
-                w, h = min(w, max_w), min(h, max_h)
+                w = max(self.image_label.winfo_width(), 200)
+                h = max(self.image_label.winfo_height(), 200)
+                w, h = min(w, 4000), min(h, 3000)
 
                 src.thumbnail((w, h), Image.Resampling.LANCZOS)
-
                 if src.mode not in ("RGB", "RGBA", "L"):
                     src = src.convert("RGB")
 
@@ -290,12 +345,17 @@ class ImageViewerApp:
 
                 self.large_img_ref = ImageTk.PhotoImage(src)
                 self.image_label.config(image=self.large_img_ref, text="")
-                self.status_var.set(f"Displaying: {os.path.basename(filepath)}")
+                self.status_var.set(f"🖼️ {os.path.basename(filepath)}")
         except Exception as e:
-            traceback.print_exc()
+            print(f"[Image Load Error] {e}")
             self.image_label.config(image="", text=f"❌ {type(e).__name__}: {e}", fg="#ff6b6b")
-            self.large_img_ref = None
             self.status_var.set("Error loading image")
+
+    def _cleanup(self):
+        self._stop_event.set()
+        if self._load_thread and self._load_thread.is_alive():
+            self._load_thread.join(timeout=1.0)
+        self.root.destroy()
 
 
 # ─── ENTRY POINT ────────────────────────────────────────────────────────────
@@ -308,10 +368,10 @@ if __name__ == "__main__":
 
     root = tk.Tk()
     try:
-        root.call("tk", "scaling", 1.5)  # HiDPI for Windows 11
+        root.call("tk", "scaling", 1.5)
     except tk.TclError:
         pass
 
     app = ImageViewerApp(root)
-    root.protocol("WM_DELETE_WINDOW", lambda: (app._cancel_load(), root.destroy()))
+    root.protocol("WM_DELETE_WINDOW", app._cleanup)
     root.mainloop()

@@ -1,71 +1,69 @@
+# chat.py
+# https://flet.dev/docs/tutorials/chat#adding-page-controls-and-handling-events
 from dataclasses import dataclass
-from typing import Final
 
 import flet as ft
 
 
 @dataclass
-class Message:
+class Message:  # noqa: B903
     user_name: str
     text: str
     message_type: str
 
 
-_AVATAR_COLORS: Final[list[str]] = [
-    ft.Colors.AMBER,
-    ft.Colors.BLUE,
-    ft.Colors.BROWN,
-    ft.Colors.CYAN,
-    ft.Colors.GREEN,
-    ft.Colors.INDIGO,
-    ft.Colors.LIME,
-    ft.Colors.ORANGE,
-    ft.Colors.PINK,
-    ft.Colors.PURPLE,
-    ft.Colors.RED,
-    ft.Colors.TEAL,
-    ft.Colors.YELLOW,
-]
-
-
 @ft.control
 class ChatMessage(ft.Row):
-    def __init__(self, message: Message) -> None:
+    def __init__(self, message: Message):
         super().__init__()
         self.message = message
         self.vertical_alignment = ft.CrossAxisAlignment.START
         self.controls = [
             ft.CircleAvatar(
-                content=ft.Text(self.get_initials(message.user_name)),
+                content=ft.Text(self.get_initials(self.message.user_name)),
                 color=ft.Colors.WHITE,
-                bgcolor=self.get_avatar_color(message.user_name),
+                bgcolor=self.get_avatar_color(self.message.user_name),
             ),
             ft.Column(
                 tight=True,
                 spacing=5,
                 controls=[
-                    ft.Text(message.user_name, weight=ft.FontWeight.BOLD),
-                    ft.Text(message.text, selectable=True),
+                    ft.Text(self.message.user_name, weight=ft.FontWeight.BOLD),
+                    ft.Text(self.message.text, selectable=True),
                 ],
             ),
         ]
 
-    @staticmethod
-    def get_initials(user_name: str) -> str:
-        if not user_name:
-            return "?"
-        return "".join(word[0] for word in user_name.split()[:2]).upper()
+    def get_initials(self, user_name: str):
+        if user_name:
+            return user_name[:1].capitalize()
+        else:
+            return "Unknown"  # or any default value you prefer
 
-    @staticmethod
-    def get_avatar_color(user_name: str) -> str:
-        return _AVATAR_COLORS[abs(hash(user_name)) % len(_AVATAR_COLORS)]
+    def get_avatar_color(self, user_name: str):
+        colors_lookup = [
+            ft.Colors.AMBER,
+            ft.Colors.BLUE,
+            ft.Colors.BROWN,
+            ft.Colors.CYAN,
+            ft.Colors.GREEN,
+            ft.Colors.INDIGO,
+            ft.Colors.LIME,
+            ft.Colors.ORANGE,
+            ft.Colors.PINK,
+            ft.Colors.PURPLE,
+            ft.Colors.RED,
+            ft.Colors.TEAL,
+            ft.Colors.YELLOW,
+        ]
+        return colors_lookup[hash(user_name) % len(colors_lookup)]
 
 
-def main(page: ft.Page) -> None:
+def main(page: ft.Page):
     page.horizontal_alignment = ft.CrossAxisAlignment.STRETCH
     page.title = "Flet Chat"
 
-    def join_chat_click(e: ft.ControlEvent) -> None:
+    def join_chat_click(e):
         if not join_user_name.value:
             join_user_name.error_text = "Name cannot be blank!"
             join_user_name.update()
@@ -81,8 +79,8 @@ def main(page: ft.Page) -> None:
                 )
             )
 
-    async def send_message_click(e: ft.ControlEvent) -> None:
-        if new_message.value:
+    async def send_message_click(e):
+        if new_message.value != "":
             page.pubsub.send_all(
                 Message(
                     page.session.store.get("user_name"),
@@ -91,19 +89,19 @@ def main(page: ft.Page) -> None:
                 )
             )
             new_message.value = ""
-            await new_message.focus_async()
+            await new_message.focus()
 
-    async def on_message(message: Message) -> None:
+    def on_message(message: Message):
         if message.message_type == "chat_message":
-            chat.controls.append(ChatMessage(message))
+            m = ChatMessage(message)
         elif message.message_type == "login_message":
-            chat.controls.append(
-                ft.Text(message.text, italic=True, color=ft.Colors.BLACK_45, size=12)
-            )
-        await page.update_async()
+            m = ft.Text(message.text, italic=True, color=ft.Colors.BLACK_45, size=12)
+        chat.controls.append(m)
+        page.update()
 
     page.pubsub.subscribe(on_message)
 
+    # A dialog asking for a user display name
     join_user_name = ft.TextField(
         label="Enter your name to join the chat",
         autofocus=True,
@@ -120,12 +118,14 @@ def main(page: ft.Page) -> None:
 
     page.overlay.append(welcome_dlg)
 
+    # Chat messages
     chat = ft.ListView(
         expand=True,
         spacing=10,
         auto_scroll=True,
     )
 
+    # A new message entry form
     new_message = ft.TextField(
         hint_text="Write a message...",
         autofocus=True,
@@ -137,6 +137,7 @@ def main(page: ft.Page) -> None:
         on_submit=send_message_click,
     )
 
+    # Add everything to the page
     page.add(
         ft.Container(
             content=chat,
