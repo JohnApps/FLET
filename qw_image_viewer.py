@@ -128,7 +128,8 @@ class ImageViewerApp:
         self.path_var = tk.StringVar()
         self.path_entry = tk.Entry(
             center_frame, textvariable=self.path_var, state="readonly",
-            bg="#2b2b2b", fg="#00e676", font=("Lucida Console", 10), relief=tk.FLAT, cursor="ibeam", exportselection=True
+            bg="#000000", fg="#ffffff", font=("Lucida Console", 10), 
+            relief=tk.FLAT, cursor="ibeam", exportselection=True
         )
         self.path_entry.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 5))
         # Auto-select text on click/focus
