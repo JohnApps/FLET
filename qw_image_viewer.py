@@ -128,7 +128,7 @@ class ImageViewerApp:
         self.path_var = tk.StringVar()
         self.path_entry = tk.Entry(
             center_frame, textvariable=self.path_var, state="readonly",
-            bg="#2b2b2b", fg="#00e676", font=("Consolas", 10), relief=tk.FLAT, cursor="ibeam", exportselection=True
+            bg="#2b2b2b", fg="#00e676", font=("Lucida Console", 10), relief=tk.FLAT, cursor="ibeam", exportselection=True
         )
         self.path_entry.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 5))
         # Auto-select text on click/focus
@@ -171,8 +171,7 @@ class ImageViewerApp:
 
     def _populate_node(self, parent: str, path: str) -> None:
         try:
-            # Sort folders Z-A instead of A-Z
-            entries = sorted(os.scandir(path), key=lambda e: e.name.lower(), reverse=True)
+            entries = sorted(os.scandir(path), key=lambda e: e.name.lower())
         except (PermissionError, OSError) as e:
             print(f"[Tree Scan Warning] {e}")
             return
@@ -180,6 +179,7 @@ class ImageViewerApp:
             if entry.is_dir(follow_symlinks=False):
                 node = self.tree.insert(parent, tk.END, text=entry.name, open=False, values=(entry.path,))
                 self.tree.insert(node, tk.END, text="placeholder")
+
     def _on_tree_expand(self, event):
         item = self.tree.focus()
         if not item: return
