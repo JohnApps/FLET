@@ -11,7 +11,6 @@ Up button to go to parent folder
 add a search button (ilike) in the left pane
 Done. Search field added to left pane - searches recursively through all subdirectories for matching image names (case-insensitive). Results are limited to 100 matches, click "← Back" to return to folder view.
 """
-import os
 from pathlib import Path
 import flet as ft
 from flet import icons as icon_module

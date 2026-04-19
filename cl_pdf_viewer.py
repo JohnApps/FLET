@@ -23,7 +23,6 @@ import os
 import base64
 from pathlib import Path
 from typing import Optional, List
-import re
 
 
 class PDFDocument:

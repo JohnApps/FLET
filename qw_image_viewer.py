@@ -59,7 +59,7 @@ class DiskCache:
 
 
 class ImageViewerApp:
-    ROOT_DIR = r"H:\bilder\PAN"
+    ROOT_DIR = r"O:\bilder"
     CACHE_DIR = r"H:\FLET\.qw_thumb_cache"
     THUMB_SIZE = (110, 110)
     # Excluded *.tif / *.tiff per request
